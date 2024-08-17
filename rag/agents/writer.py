@@ -14,9 +14,12 @@ async def write(state: ComplaintState):
     """
     openai = OpenAI()
     id = state['id']
+    summary = state['summary']
     complaint = state['complaint']
     category = state['category']
     sub_category = state['sub_category']
+    resolved = state['resolved']
+    admin_text = state['admin_text']
 
     print(f"Writing complaint to Pinecone: {complaint} with category: {category} and sub-category: {sub_category}")
     model_name = "text-embedding-3-small"
@@ -35,8 +38,15 @@ async def write(state: ComplaintState):
             {
                 "id": id,
                 "values": embedding,
-                "metadata": {"text": complaint, "product": category,
-                             "sub_product": sub_category}
+                "metadata": {
+                    "userId": id,
+                    "summary": summary,
+                    "product": category,
+                    "sub_product": sub_category,
+                    "text": complaint,
+                    "resolved": resolved,
+                    "admin_text": admin_text
+                }
             },
         ],
         namespace="rag_complaints"
@@ -47,5 +57,6 @@ async def write(state: ComplaintState):
         "complaint": complaint,
         "category": category,
         "sub_category": sub_category,
-        "time": "2021-09-01"
+        "resolved": resolved,
+        "admin_text": admin_text
     }

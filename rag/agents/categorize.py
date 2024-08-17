@@ -22,7 +22,7 @@ async def categorize(state: ComplaintState):
                 zip(text_contexts, product_category_contexts, sub_category_contexts)]
 
     query = f"Given the complain: {complaint} \n" \
-            f"You have two tasks. The first is to identify the product category as credit/cash\n" \
+            f"You have two tasks. The first is to identify the product category. The product must be isolated and can be identified on the most common category based on context\n" \
             f"The second is to identify the subcategory\n" \
             f"Please provide the product category and subcategory based on the context\n" \
             f"You must return nothing but a JSON with the field 'category' (str) and 'subcategory' (str)\n"

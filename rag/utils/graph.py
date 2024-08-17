@@ -40,3 +40,26 @@ async def stream(inputs: dict):
         print(f"Receiving new event of type: {event}...")
         print(chunk)
         print("\n\n")
+
+
+async def invoke_graph(inputs: dict):
+    """
+    Run the RAG model
+    :param inputs:
+    :return:
+    """
+    workflow = build()
+    graph = workflow.compile()
+
+    result = await graph.ainvoke(inputs)
+
+    return {
+        "id": result['id'],
+        "summary": result['summary'],
+        "complaint": result['complaint'],
+        "category": result['category'],
+        "sub_category": result['sub_category'],
+        "resolved": result['resolved'],
+        "admin_text": result['admin_text'],
+        "similar_complaints": result['similar_complaints']
+    }
