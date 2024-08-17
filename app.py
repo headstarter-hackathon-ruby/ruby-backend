@@ -230,6 +230,14 @@ async def get_similar_complaints_with_solution(complaint: str, limit: int = 3):
     return await get_similar_complaints(complaint, limit)
 
 
+@app.get("/complaints/open")
+async def read_resolution_status():
+    complaints = get_all_complaints()
+    resolved, unresolved = count_resolved_unresolved(complaints)
+    return {
+        "unresolved": unresolved,
+    }
+
 if __name__ == "__main__":
     import uvicorn
 
