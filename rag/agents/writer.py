@@ -1,4 +1,5 @@
 import os
+import uuid
 
 from openai import OpenAI
 from pinecone import Pinecone
@@ -36,7 +37,7 @@ async def write(state: ComplaintState):
     index.upsert(
         vectors=[
             {
-                "id": id,
+                "id": str(uuid.uuid4()),
                 "values": embedding,
                 "metadata": {
                     "userID": id,
