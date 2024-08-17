@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from openai import OpenAI
 from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 from rag.utils.graph import invoke_graph
 from pinecone import Pinecone
 import numpy as np
@@ -26,6 +27,17 @@ pc = Pinecone(api_key=PINECONE_API_KEY)
 index = pc.Index(INDEX_NAME)
 
 # Generate some example data
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000",
+                   "https://ruby-frontend-five.vercel.app/"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
+
 def generate_example_data(numOfEntries):
     data = []
     for i in range(numOfEntries):
@@ -96,17 +108,17 @@ async def text_prompt(request: PromptFormat):
                 'similar_complaints': []
             }
             await invoke_graph(data)
-
-            return {"result": event.textResponse}
+            return {"result": event}
 
         else:
             print("Not a complaint")
+
         return {"result": event}
 
     except Exception as e:
         return {"error": str(e)}
 
-# New functions for complaint queries
+# uvicorn app:app --reload# New functions for complaint queries
 def get_all_complaints():
     dummy_vector = np.zeros(1536).tolist()
     results = index.query(

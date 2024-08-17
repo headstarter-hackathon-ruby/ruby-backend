@@ -1,12 +1,13 @@
 import asyncio
 import json
 import os
+import random
 
 from dotenv import load_dotenv
 from openai import OpenAI
 from pinecone import Pinecone
 
-from rag.utils.graph import build, stream
+from rag.utils.graph import stream
 
 
 def load_sample_data():
@@ -43,12 +44,20 @@ def load_sample_data():
                 {
                     "id": id,
                     "values": embedding,
-                    "metadata": {"text": complaint_text, "product": metadata['product'],
-                                 "sub_product": metadata['sub_product']}
+                    "metadata": {
+                        "userID": id,
+                        "text": complaint_text,
+                        "summary": complaint_text,
+                        "product": metadata['product'],
+                        "subcategory": metadata['sub_product'],
+                        "resolved": random.choice([True, False]),
+                        "admin_text": " ",
+                    }
                 },
             ],
             namespace=namespace
         )
+
 
 async def main():
     """
@@ -57,8 +66,6 @@ async def main():
     :return:
     """
     sample_complaint = "I am not happy with the product as I have bought it with my credit card and found defects. I want a refund"
-    graph = build()
-    graph.compile()
     inputs = {
         'complaint': sample_complaint,
         'id': '1',

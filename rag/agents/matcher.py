@@ -38,7 +38,7 @@ async def match(state: ComplaintState):
         similar_complaints = [
             {
                 'product': match['metadata']['product'],
-                'sub_product': match['metadata'].get('sub_product', 'General-purpose credit card or charge card'),
+                'sub_product': match['metadata'].get('subcategory', 'General-purpose credit card or charge card'),
                 'text': match['metadata']['text']
             }
             for match in top_matches['matches']
