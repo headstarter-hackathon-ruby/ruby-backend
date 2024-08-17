@@ -56,6 +56,7 @@ class MessageFormat(BaseModel):
     complaint: bool
     category: str
     subcategory: str
+    textResponse: str
 
 
 class PromptFormat(BaseModel):
@@ -70,7 +71,7 @@ async def text_prompt(request: PromptFormat):
         completion = client.beta.chat.completions.parse(
             model="gpt-4o-2024-08-06",
             messages=[
-                {"role": "system", "content": "Using the given prompt, determine if it is a complaint or not. If it is a complaint, classify it as its appropriate complaint and subcategory, alongside a summary."},
+                {"role": "system", "content": "Using the given prompt, determine if it is a complaint or not. If it is a complaint, classify it as its appropriate complaint and subcategory, alongside a summary. If it isnt a complaint, please tell the user in text response. If it is a complaint, say sorry and you have documented and sent it to the support team in the text response with some common trouble shooting tips"},
                 {"role": "user", "content": request.prompt},
             ],
             response_format=MessageFormat,
