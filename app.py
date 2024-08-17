@@ -159,6 +159,14 @@ async def read_resolution_status():
         "resolution_rate": resolved / len(complaints) if complaints else 0
     }
 
+@app.get("/complaints/open")
+async def read_resolution_status():
+    complaints = get_all_complaints()
+    resolved, unresolved = count_resolved_unresolved(complaints)
+    return {
+        "unresolved": unresolved,
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
