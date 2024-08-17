@@ -8,28 +8,43 @@ from rag.memory.complaint_state import ComplaintState
 
 async def match(state: ComplaintState):
     """
-    Match the complaint text to a response
+    Match the complaint text to a similar complaints with its vector embedding
     :param state:
     :return:
     """
     openai = OpenAI()
     pinecone = Pinecone(api_key=os.getenv('PINECONE_API_KEY'))
-    pinecone_index = pinecone.Index("complaints")
-    namespace = "complaints"
+    index = pinecone.Index("complaints")
+    namespace = "rag_complaints"
+    model_name = "text-embedding-3-small"
 
     complaint = state['complaint']
 
-    raw_query_embedding = openai.embeddings.create(
+    raw_embedding = openai.embeddings.create(
         input=[complaint],
-        model="text-embedding-3-small"
+        model=model_name
     )
 
-    complaint_embedding = raw_query_embedding.data[0].embedding
-
-    top_matches = pinecone_index.query(vector=complaint_embedding, top_k=10, include_metadata=True, namespace=namespace)
-
-    similar_complaints = [item['metadata']['text'] for item in top_matches['matches']]
+    complaint_embedding = raw_embedding.data[0].embedding
 
     # Query Pinecone for the most similar complaint with complaint_embedding
-
-    return {"similar_compaints": similar_complaints}
+    top_matches = index.query(
+        namespace=namespace,
+        vector=complaint_embedding,
+        top_k=3,
+        include_values=True,
+        include_metadata=True,
+    )
+    similar_complaints = [
+        {
+            'product': match['metadata']['product'],
+            'sub_product': match['metadata']['sub_product'],
+            'text': match['metadata']['text']
+        }
+        for match in top_matches['matches']
+    ]
+    print(f"Similar complaints: {similar_complaints}")
+    return {
+        "complaint_embedding": complaint_embedding,
+        "similar_complaints": similar_complaints,
+    }

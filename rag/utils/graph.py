@@ -14,14 +14,14 @@ def build():
     Build the RAG model, which is a state graph that needs to be compiled
     """
     workflow = StateGraph(ComplaintState)
-    workflow.add_node('Categorize', categorize)
     workflow.add_node('Match', match)
+    workflow.add_node('Categorize', categorize)
     workflow.add_node('Write', write)
 
-    workflow.add_edge('Categorize', 'Match')
-    workflow.add_edge('Match', 'Write')
+    workflow.add_edge('Match', 'Categorize')
+    workflow.add_edge('Categorize', 'Write')
 
-    workflow.set_entry_point('Categorize')
+    workflow.set_entry_point('Match')
     workflow.set_finish_point('Write')
 
     return workflow

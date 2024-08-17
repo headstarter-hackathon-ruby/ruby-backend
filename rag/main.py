@@ -61,7 +61,8 @@ async def main():
     graph.compile()
     inputs = {
         'complaint': sample_complaint,
-        'time': '2021-09-01',
+        'id': '1',
+        'time': 'start',
         'product_category': '',
         'sub_category': '',
         'similar_complaints': []
@@ -71,5 +72,4 @@ async def main():
     print(complaint)
 
 if __name__ == "__main__":
-    load_sample_data()
-    print("Sample data loaded")
+    asyncio.run(main())
