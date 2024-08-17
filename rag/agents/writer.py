@@ -39,10 +39,10 @@ async def write(state: ComplaintState):
                 "id": id,
                 "values": embedding,
                 "metadata": {
-                    "userId": id,
+                    "userID": id,
                     "summary": summary,
                     "product": category,
-                    "sub_product": sub_category,
+                    "subcategory": sub_category,
                     "text": complaint,
                     "resolved": resolved,
                     "admin_text": admin_text
