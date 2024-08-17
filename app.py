@@ -107,11 +107,11 @@ async def text_prompt(request: PromptFormat):
                 'similar_complaints': []
             }
             await invoke_graph(data)
-
-            return {"result": event.textResponse}
+            return {"result": event}
 
         else:
             print("Not a complaint")
+
         return {"result": event}
 
     except Exception as e:
