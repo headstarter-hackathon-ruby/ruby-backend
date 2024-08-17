@@ -80,6 +80,11 @@ async def text_prompt(request: PromptFormat):
         # Extract and return the content of the response
         print(completion)
         event = completion.choices[0].message.parsed
+        if event.complaint:
+            print("Complaint")
+            # DB insert logic here
+        else:
+            print("Not a complaint")
         return {"result": event}
 
     except Exception as e:
