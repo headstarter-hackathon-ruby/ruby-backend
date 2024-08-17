@@ -20,3 +20,5 @@ tqdm==4.66.5
 typing_extensions==4.12.2
 uvicorn==0.30.6
 wheel==0.43.0
+pinecone-client==5.0.1
+python-dotenv==1.0.1
