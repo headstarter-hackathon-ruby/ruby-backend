@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from openai import OpenAI
 from pydantic import BaseModel
-
+from fastapi.middleware.cors import CORSMiddleware
 from rag.utils.graph import invoke_graph
 
 load_dotenv()
@@ -18,6 +18,15 @@ app = FastAPI()
 
 
 # Generate some example data
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000",
+                   "https://ruby-frontend-five.vercel.app/"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
 
 
 def generate_example_data(numOfEntries):
@@ -108,7 +117,7 @@ async def text_prompt(request: PromptFormat):
     except Exception as e:
         return {"error": str(e)}
 
-
+# uvicorn app:app --reload
 # If running the script directly, start the FastAPI server
 if __name__ == "__main__":
     import uvicorn
