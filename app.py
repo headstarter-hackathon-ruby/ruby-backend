@@ -52,11 +52,14 @@ def generate_example_data(numOfEntries):
         data.append(example_data)
     return data
 
+
 data = generate_example_data(5)
+
 
 @app.get("/")
 def read_root():
     return data
+
 
 @app.get("/items/{item_id}")
 def read_item(item_id: int):
@@ -66,6 +69,8 @@ def read_item(item_id: int):
     return {"error": "Item not found"}
 
 # Define the request body formats
+
+
 class MessageFormat(BaseModel):
     summary: str
     complaint: bool
@@ -73,9 +78,11 @@ class MessageFormat(BaseModel):
     subcategory: str
     textResponse: str
 
+
 class PromptFormat(BaseModel):
     prompt: str
     userID: str
+
 
 @app.post("/textPrompt", description="This endpoint will post and use GPT to classify a text prompt")
 async def text_prompt(request: PromptFormat):
@@ -118,6 +125,8 @@ async def text_prompt(request: PromptFormat):
         return {"error": str(e)}
 
 # uvicorn app:app --reload# New functions for complaint queries
+
+
 def get_all_complaints():
     dummy_vector = np.zeros(1536).tolist()
     results = index.query(
@@ -128,28 +137,46 @@ def get_all_complaints():
     )
     return [{'id': match['id'], 'metadata': match['metadata']} for match in results['matches']]
 
+
 def get_all_categories(complaints):
-    categories = [complaint['metadata'].get('product', 'Unknown') for complaint in complaints]
+    categories = [complaint['metadata'].get(
+        'product', 'Unknown') for complaint in complaints]
     return dict(Counter(categories))
 
+
 def count_resolved_unresolved(complaints):
-    resolved = sum(1 for c in complaints if c['metadata'].get('resolved', False))
+    resolved = sum(
+        1 for c in complaints if c['metadata'].get('resolved', False))
     return resolved, len(complaints) - resolved
 
 # New endpoints
-@app.get("/complaints/all")
-async def read_all_complaints():
-    complaints = get_all_complaints()
-    return {"total_complaints": len(complaints), "complaints": complaints[:5]}  # Return only first 5 for brevity
 
-@app.get("/complaints/categories")
+
+@app.get("/complaints/all", description="Returns all complaints")
+async def read_all_complaints():
+    '''
+    This function returns all complaints. It returns the metadata of all complaints.
+    '''
+    complaints = get_all_complaints()
+    # Return only first 5 for brevity
+    return {"total_complaints": len(complaints), "complaints": complaints[:5]}
+
+
+@app.get("/complaints/categories", description="Returns the categories of all complaints")
 async def read_categories():
+    '''
+    This function returns the categories of all complaints. It calculates the number of complaints in each category.
+    '''
     complaints = get_all_complaints()
     categories = get_all_categories(complaints)
     return {"categories": categories}
 
-@app.get("/complaints/resolution_status")
+
+@app.get("/complaints/resolution_status", description="Returns the resolution status of all complaints")
 async def read_resolution_status():
+    '''
+    This function returns the resolution status of all complaints. It calculates the number of resolved and unresolved complaints,
+    '''
     complaints = get_all_complaints()
     resolved, unresolved = count_resolved_unresolved(complaints)
     return {
