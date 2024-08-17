@@ -1,12 +1,13 @@
 import os
 from datetime import datetime, timedelta
-
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from openai import OpenAI
 from pydantic import BaseModel
-
 from rag.utils.graph import invoke_graph
+from pinecone import Pinecone
+import numpy as np
+from collections import Counter
 
 load_dotenv()
 print(os.environ.get("OPENAI_API_KEY"))
@@ -16,10 +17,15 @@ client = OpenAI(
 
 app = FastAPI()
 
+# Pinecone setup
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+INDEX_NAME = "complaints"
+NAME_SPACE = "rag_complaints"
+
+pc = Pinecone(api_key=PINECONE_API_KEY)
+index = pc.Index(INDEX_NAME)
 
 # Generate some example data
-
-
 def generate_example_data(numOfEntries):
     data = []
     for i in range(numOfEntries):
@@ -35,14 +41,11 @@ def generate_example_data(numOfEntries):
         data.append(example_data)
     return data
 
-
 data = generate_example_data(5)
-
 
 @app.get("/")
 def read_root():
     return data
-
 
 @app.get("/items/{item_id}")
 def read_item(item_id: int):
@@ -51,10 +54,7 @@ def read_item(item_id: int):
             return item
     return {"error": "Item not found"}
 
-
 # Define the request body formats
-
-
 class MessageFormat(BaseModel):
     summary: str
     complaint: bool
@@ -62,11 +62,9 @@ class MessageFormat(BaseModel):
     subcategory: str
     textResponse: str
 
-
 class PromptFormat(BaseModel):
     prompt: str
     userID: str
-
 
 @app.post("/textPrompt", description="This endpoint will post and use GPT to classify a text prompt")
 async def text_prompt(request: PromptFormat):
@@ -108,9 +106,47 @@ async def text_prompt(request: PromptFormat):
     except Exception as e:
         return {"error": str(e)}
 
+# New functions for complaint queries
+def get_all_complaints():
+    dummy_vector = np.zeros(1536).tolist()
+    results = index.query(
+        vector=dummy_vector,
+        top_k=10000,
+        include_metadata=True,
+        namespace=NAME_SPACE
+    )
+    return [{'id': match['id'], 'metadata': match['metadata']} for match in results['matches']]
 
-# If running the script directly, start the FastAPI server
+def get_all_categories(complaints):
+    categories = [complaint['metadata'].get('product', 'Unknown') for complaint in complaints]
+    return dict(Counter(categories))
+
+def count_resolved_unresolved(complaints):
+    resolved = sum(1 for c in complaints if c['metadata'].get('resolved', False))
+    return resolved, len(complaints) - resolved
+
+# New endpoints
+@app.get("/complaints/all")
+async def read_all_complaints():
+    complaints = get_all_complaints()
+    return {"total_complaints": len(complaints), "complaints": complaints[:5]}  # Return only first 5 for brevity
+
+@app.get("/complaints/categories")
+async def read_categories():
+    complaints = get_all_complaints()
+    categories = get_all_categories(complaints)
+    return {"categories": categories}
+
+@app.get("/complaints/resolution_status")
+async def read_resolution_status():
+    complaints = get_all_complaints()
+    resolved, unresolved = count_resolved_unresolved(complaints)
+    return {
+        "resolved": resolved,
+        "unresolved": unresolved,
+        "resolution_rate": resolved / len(complaints) if complaints else 0
+    }
+
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=8000)
