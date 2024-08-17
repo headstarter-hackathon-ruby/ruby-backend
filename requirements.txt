@@ -33,6 +33,7 @@ numpy==1.26.4
 openai==1.41.0
 orjson==3.10.7
 packaging==24.1
+pathlib==1.0.1
 pinecone==5.0.1
 pinecone-client==5.0.1
 pinecone-plugin-inference==1.0.3
