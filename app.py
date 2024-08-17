@@ -1,14 +1,16 @@
 import os
+from collections import Counter
 from datetime import datetime, timedelta
+
+import numpy as np
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 from pydantic import BaseModel
-from fastapi.middleware.cors import CORSMiddleware
-from rag.utils.graph import invoke_graph
+
 from pinecone import Pinecone
-import numpy as np
-from collections import Counter
+from rag.utils.graph import invoke_graph
 
 load_dotenv()
 client = OpenAI(
@@ -68,6 +70,7 @@ def read_item(item_id: int):
             return item
     return {"error": "Item not found"}
 
+
 # Define the request body formats
 
 
@@ -124,6 +127,7 @@ async def text_prompt(request: PromptFormat):
     except Exception as e:
         return {"error": str(e)}
 
+
 # uvicorn app:app --reload# New functions for complaint queries
 
 
@@ -149,14 +153,46 @@ def count_resolved_unresolved(complaints):
         1 for c in complaints if c['metadata'].get('resolved', False))
     return resolved, len(complaints) - resolved
 
+
+async def get_similar_complaints(complaint: str, limit: int):
+    raw_embedding = client.embeddings.create(
+        input=[complaint],
+        model="text-embedding-3-small"
+    )
+    embedding = raw_embedding.data[0].embedding
+
+    top_matches = index.query(
+        namespace=NAME_SPACE,
+        vector=embedding,
+        top_k=limit,
+        include_values=True,
+        include_metadata=True,
+    )
+
+    similar_complaints = [
+        {
+            'product': match['metadata']['product'],
+            'subcategory': match['metadata'].get('subcategory', 'General-purpose credit card or charge card'),
+            'text': match['metadata']['text'],
+            'resolved': match['metadata']['resolved'],
+            'admin_text': match['metadata']['admin_text'],
+            'summary': match['metadata']['summary'],
+            'userID': match['metadata']['userID'],
+
+        }
+        for match in top_matches['matches']
+    ]
+    return similar_complaints
+
+
 # New endpoints
 
 
 @app.get("/complaints/all", description="Returns all complaints")
 async def read_all_complaints():
-    '''
+    """
     This function returns all complaints. It returns the metadata of all complaints.
-    '''
+    """
     complaints = get_all_complaints()
     # Return only first 5 for brevity
     return {"total_complaints": len(complaints), "complaints": complaints[:5]}
@@ -164,9 +200,9 @@ async def read_all_complaints():
 
 @app.get("/complaints/categories", description="Returns the categories of all complaints")
 async def read_categories():
-    '''
+    """
     This function returns the categories of all complaints. It calculates the number of complaints in each category.
-    '''
+    """
     complaints = get_all_complaints()
     categories = get_all_categories(complaints)
     return {"categories": categories}
@@ -174,9 +210,9 @@ async def read_categories():
 
 @app.get("/complaints/resolution_status", description="Returns the resolution status of all complaints")
 async def read_resolution_status():
-    '''
+    """
     This function returns the resolution status of all complaints. It calculates the number of resolved and unresolved complaints,
-    '''
+    """
     complaints = get_all_complaints()
     resolved, unresolved = count_resolved_unresolved(complaints)
     return {
@@ -185,6 +221,16 @@ async def read_resolution_status():
         "resolution_rate": resolved / len(complaints) if complaints else 0
     }
 
+
+@app.get("/complaints/similar", description="Returns similar complaints")
+async def get_similar_complaints_with_solution(complaint: str, limit: int = 3):
+    """
+    This function returns similar complaints to the given complaint with an optional limit of 3.
+    """
+    return await get_similar_complaints(complaint, limit)
+
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
