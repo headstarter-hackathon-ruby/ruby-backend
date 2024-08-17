@@ -1,7 +1,7 @@
 import asyncio
 import json
 import os
-import random
+import uuid
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -29,7 +29,8 @@ def load_sample_data():
         complaint_text = complaint['_source']['complaint_what_happened']
         metadata = {
             'product': complaint['_source']['product'],
-            'sub_product': complaint['_source']['sub_product']
+            'sub_product': complaint['_source']['sub_product'],
+            'response': complaint['_source']['company_public_response']
         }
         # Create the embedding for the complaint text
         raw_embedding = openai.embeddings.create(
@@ -38,11 +39,14 @@ def load_sample_data():
         )
         embedding = raw_embedding.data[0].embedding
 
+        response = metadata['response']
+        resolved = True if response else False
+        admin_text = response if resolved else ' '
         # Insert the complaint into the Pinecone index
         index.upsert(
             vectors=[
                 {
-                    "id": id,
+                    "id": str(uuid.uuid4()),
                     "values": embedding,
                     "metadata": {
                         "userID": id,
@@ -50,8 +54,8 @@ def load_sample_data():
                         "summary": complaint_text,
                         "product": metadata['product'],
                         "subcategory": metadata['sub_product'],
-                        "resolved": random.choice([True, False]),
-                        "admin_text": " ",
+                        "resolved": resolved,
+                        "admin_text": admin_text,
                     }
                 },
             ],

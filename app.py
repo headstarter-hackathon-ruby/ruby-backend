@@ -1,17 +1,18 @@
 import os
+from collections import Counter
 from datetime import datetime, timedelta
+
+import numpy as np
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 from pydantic import BaseModel
-from fastapi.middleware.cors import CORSMiddleware
-from rag.utils.graph import invoke_graph
+
 from pinecone import Pinecone
-import numpy as np
-from collections import Counter
+from rag.utils.graph import invoke_graph
 
 load_dotenv()
-print(os.environ.get("OPENAI_API_KEY"))
 client = OpenAI(
     api_key=os.environ.get("OPENAI_API_KEY"),
 )
@@ -53,11 +54,14 @@ def generate_example_data(numOfEntries):
         data.append(example_data)
     return data
 
+
 data = generate_example_data(5)
+
 
 @app.get("/")
 def read_root():
     return data
+
 
 @app.get("/items/{item_id}")
 def read_item(item_id: int):
@@ -66,7 +70,10 @@ def read_item(item_id: int):
             return item
     return {"error": "Item not found"}
 
+
 # Define the request body formats
+
+
 class MessageFormat(BaseModel):
     summary: str
     complaint: bool
@@ -74,9 +81,11 @@ class MessageFormat(BaseModel):
     subcategory: str
     textResponse: str
 
+
 class PromptFormat(BaseModel):
     prompt: str
     userID: str
+
 
 @app.post("/textPrompt", description="This endpoint will post and use GPT to classify a text prompt")
 async def text_prompt(request: PromptFormat):
@@ -86,7 +95,7 @@ async def text_prompt(request: PromptFormat):
             model="gpt-4o-2024-08-06",
             messages=[
                 {"role": "system",
-                 "content": "Using the given prompt, determine if it is a complaint or not. If it is a complaint, classify it as its appropriate complaint and subcategory, alongside a summary. If it isnt a complaint, please tell the user in text response. If it is a complaint, say sorry and you have documented and sent it to the support team in the text response with some common trouble shooting tips"},
+                 "content": "You are a helpful and friendly chat support agent. Your job is to assist users with their complaints and provide troubleshooting tips. Using the given prompt, determine if it is a complaint or not. If it is a complaint, classify it as its appropriate complaint and subcategory, alongside a summary. If it isn't a complaint, please tell the user in a text response. If it is a complaint, say sorry and you have documented and sent it to the support team in the text response with some common troubleshooting tips."},
                 {"role": "user", "content": request.prompt},
             ],
             response_format=MessageFormat,
@@ -118,7 +127,10 @@ async def text_prompt(request: PromptFormat):
     except Exception as e:
         return {"error": str(e)}
 
+
 # uvicorn app:app --reload# New functions for complaint queries
+
+
 def get_all_complaints():
     dummy_vector = np.zeros(1536).tolist()
     results = index.query(
@@ -129,28 +141,78 @@ def get_all_complaints():
     )
     return [{'id': match['id'], 'metadata': match['metadata']} for match in results['matches']]
 
+
 def get_all_categories(complaints):
-    categories = [complaint['metadata'].get('product', 'Unknown') for complaint in complaints]
+    categories = [complaint['metadata'].get(
+        'product', 'Unknown') for complaint in complaints]
     return dict(Counter(categories))
 
+
 def count_resolved_unresolved(complaints):
-    resolved = sum(1 for c in complaints if c['metadata'].get('resolved', False))
+    resolved = sum(
+        1 for c in complaints if c['metadata'].get('resolved', False))
     return resolved, len(complaints) - resolved
 
-# New endpoints
-@app.get("/complaints/all")
-async def read_all_complaints():
-    complaints = get_all_complaints()
-    return {"total_complaints": len(complaints), "complaints": complaints[:5]}  # Return only first 5 for brevity
 
-@app.get("/complaints/categories")
+async def get_similar_complaints(complaint: str, limit: int):
+    raw_embedding = client.embeddings.create(
+        input=[complaint],
+        model="text-embedding-3-small"
+    )
+    embedding = raw_embedding.data[0].embedding
+
+    top_matches = index.query(
+        namespace=NAME_SPACE,
+        vector=embedding,
+        top_k=limit,
+        include_values=True,
+        include_metadata=True,
+    )
+
+    similar_complaints = [
+        {
+            'product': match['metadata']['product'],
+            'subcategory': match['metadata'].get('subcategory', 'General-purpose credit card or charge card'),
+            'text': match['metadata']['text'],
+            'resolved': match['metadata']['resolved'],
+            'admin_text': match['metadata']['admin_text'],
+            'summary': match['metadata']['summary'],
+            'userID': match['metadata']['userID'],
+
+        }
+        for match in top_matches['matches']
+    ]
+    return similar_complaints
+
+
+# New endpoints
+
+
+@app.get("/complaints/all", description="Returns all complaints")
+async def read_all_complaints():
+    """
+    This function returns all complaints. It returns the metadata of all complaints.
+    """
+    complaints = get_all_complaints()
+    # Return only first 5 for brevity
+    return {"total_complaints": len(complaints), "complaints": complaints[:5]}
+
+
+@app.get("/complaints/categories", description="Returns the categories of all complaints")
 async def read_categories():
+    """
+    This function returns the categories of all complaints. It calculates the number of complaints in each category.
+    """
     complaints = get_all_complaints()
     categories = get_all_categories(complaints)
     return {"categories": categories}
 
-@app.get("/complaints/resolution_status")
+
+@app.get("/complaints/resolution_status", description="Returns the resolution status of all complaints")
 async def read_resolution_status():
+    """
+    This function returns the resolution status of all complaints. It calculates the number of resolved and unresolved complaints,
+    """
     complaints = get_all_complaints()
     resolved, unresolved = count_resolved_unresolved(complaints)
     return {
@@ -158,6 +220,15 @@ async def read_resolution_status():
         "unresolved": unresolved,
         "resolution_rate": resolved / len(complaints) if complaints else 0
     }
+
+
+@app.get("/complaints/similar", description="Returns similar complaints")
+async def get_similar_complaints_with_solution(complaint: str, limit: int = 3):
+    """
+    This function returns similar complaints to the given complaint with an optional limit of 3.
+    """
+    return await get_similar_complaints(complaint, limit)
+
 
 @app.get("/complaints/open")
 async def read_resolution_status():
@@ -169,4 +240,5 @@ async def read_resolution_status():
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
