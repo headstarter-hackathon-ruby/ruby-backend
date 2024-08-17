@@ -97,9 +97,9 @@ async def text_prompt(request: PromptFormat):
                 'admin_text': ' ',
                 'similar_complaints': []
             }
-            result = await invoke_graph(data)
+            await invoke_graph(data)
 
-            return {"result": result}
+            return {"result": event.textResponse}
 
         else:
             print("Not a complaint")
