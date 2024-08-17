@@ -9,7 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from rag.utils.graph import invoke_graph
 
 load_dotenv()
-print(os.environ.get("OPENAI_API_KEY"))
 client = OpenAI(
     api_key=os.environ.get("OPENAI_API_KEY"),
 )
@@ -85,7 +84,7 @@ async def text_prompt(request: PromptFormat):
             model="gpt-4o-2024-08-06",
             messages=[
                 {"role": "system",
-                 "content": "Using the given prompt, determine if it is a complaint or not. If it is a complaint, classify it as its appropriate complaint and subcategory, alongside a summary. If it isnt a complaint, please tell the user in text response. If it is a complaint, say sorry and you have documented and sent it to the support team in the text response with some common trouble shooting tips"},
+                 "content": "You are a helpful and friendly chat support agent. Your job is to assist users with their complaints and provide troubleshooting tips. Using the given prompt, determine if it is a complaint or not. If it is a complaint, classify it as its appropriate complaint and subcategory, alongside a summary. If it isn't a complaint, please tell the user in a text response. If it is a complaint, say sorry and you have documented and sent it to the support team in the text response with some common troubleshooting tips."},
                 {"role": "user", "content": request.prompt},
             ],
             response_format=MessageFormat,
