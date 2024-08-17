@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from pinecone import Pinecone
 from rag.utils.graph import invoke_graph
+from rag.utils.llm import invoke_model
 
 load_dotenv()
 client = OpenAI(
@@ -185,6 +186,69 @@ async def get_similar_complaints(complaint: str, limit: int):
     return similar_complaints
 
 
+async def get_solution(complaint: str, limit: int):
+    raw_embedding = client.embeddings.create(
+        input=[complaint],
+        model="text-embedding-3-small"
+    )
+    embedding = raw_embedding.data[0].embedding
+
+    top_matches = index.query(
+        namespace=NAME_SPACE,
+        vector=embedding,
+        top_k=limit,
+        include_values=True,
+        include_metadata=True,
+        filter={'resolved': True}
+    )
+
+    similar_solutions = [
+        {
+            'product': match['metadata']['product'],
+            'subcategory': match['metadata'].get('subcategory', 'General-purpose credit card or charge card'),
+            'text': match['metadata']['text'],
+            'admin_text': match['metadata']['admin_text'],
+            'summary': match['metadata']['summary'],
+
+        }
+        for match in top_matches['matches']
+    ]
+    text_contexts = [complaint['text'] for complaint in similar_solutions]
+    product_category_contexts = [complaint['product'] for complaint in similar_solutions]
+    sub_category_contexts = [complaint['subcategory'] for complaint in similar_solutions]
+    solutions_contexts = [complaint['admin_text'] for complaint in similar_solutions]
+    summary_contexts = [complaint['summary'] for complaint in similar_solutions]
+
+    # Combine all contexts into a single string
+    contexts = [f"Text: {text} Product: {product}, Sub-Product: {sub_product}, Solution: {solution}, Summary: {summary}"
+                for text, product, sub_product, solution, summary in
+                zip(text_contexts, product_category_contexts, sub_category_contexts, solutions_contexts,
+                    summary_contexts)]
+
+    query = f"Given the complain: {complaint} \n" \
+            f"You have one task: identify a plausible and potential solution using previous similar examples \n" \
+            f"Please provide a solution based on the context while ensuring the response is human readable and\n" \
+            f"understandable to the user. It should be short, sweet, and succint.\n" \
+
+    # Augment the query with the context
+    augmented_query = "<CONTEXT>\n" + "\n\n-------\n\n".join(
+        contexts) + "\n-------\n</CONTEXT>\n\n\n\nMY QUESTION:\n" + query
+    print(augmented_query)
+
+    prompt = [{
+        "role": "system",
+        "content": "You are a expert at identifying product categories of credit/cash and its subcategories"
+    }, {
+        "role": "user",
+        "content": augmented_query
+
+    }]
+    response = invoke_model(prompt, 'gpt-3.5-turbo')
+    return {
+        "solution": response
+    }
+
+
 # New endpoints
 
 
@@ -237,6 +301,14 @@ async def read_resolution_status():
     return {
         "unresolved": unresolved,
     }
+
+@app.get("/complaints/solutions", description="Returns solutions given a complaint")
+async def get_solutions(complaint: str, limit: int = 3):
+    """
+    This function returns similar complaints to the given complaint with an optional limit of 3.
+    """
+    return await get_solution(complaint, limit)
+
 
 if __name__ == "__main__":
     import uvicorn
