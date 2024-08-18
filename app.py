@@ -325,13 +325,9 @@ async def update_admin_note(note: str, id: str):
     """
     This function updates the admin note of a complaint.
     """
-    complaint_data = index.fetch(ids=[id], namespace="rag_complaints")
-    currentNote = complaint_data['vectors'][id]['metadata'].get(
-        'admin_text', '')
-    updatedNote = currentNote + " " + note
     index.update(
         id=id,
-        set_metadata={"admin_text": updatedNote},
+        set_metadata={"admin_text": note},
         namespace="rag_complaints",
     )
 
