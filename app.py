@@ -578,6 +578,23 @@ async def add_transaction(transaction: TransactionCreate):
             return {"message": "Transaction added successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.post("/delete_transaction", description="Delete a transaction")
+async def add_transaction(transaction: TransactionCreate):
+    """
+    This function removes a transaction from the user's account.
+    """
+    try:
+        result = supabase.table('Transactions').delete().eq('transaction_id', transaction.transaction_id).execute()
+
+        # Check if data is in the result
+        if result.data:
+            return {"message": "Transaction removed successfully", "id": transaction.transaction_id}
+        else:
+            # If no data is returned but no exception was raised, assume success
+            return {"message": "Transaction removed successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/get_transactions", description="Get all transactions")
