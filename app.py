@@ -8,7 +8,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 from pydantic import BaseModel
-import whisper
 from pinecone import Pinecone
 from rag.utils.graph import invoke_graph
 from rag.utils.llm import invoke_model
