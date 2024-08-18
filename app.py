@@ -400,7 +400,83 @@ async def transcribe(request: TranscriptionReq):
     except Exception as e:
         return {"error": str(e)}
 
+# Manual mapping of MIME types to file extensions
+#GPT only accepts these types
+image_mime_extension_map = {
+    "image/jpeg": ".jpg",       # JPEG image
+    "image/jpg": ".jpg",        # JPG image
+    "image/png": ".png",        # PNG image
+    "image/webp": ".webp",      # WEBP image
+}
 
+class ImageTranscriptionReq(BaseModel):
+    image: str
+    userID: str
+
+@app.post("/transcribe/image", description="Analyze an image and provide a description")
+async def transcribe_image(request: ImageTranscriptionReq):
+    '''
+    This function analyzes an image and provides a description, then classifies it as a complaint or not.
+    '''
+    try:
+        # Using the image URL directly without downloading
+        image_url = request.image
+
+        # Using OpenAI's vision model to analyze the image
+        response = client.chat.completions.create(
+            model="gpt-4o-2024-08-06",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Analyze this image and provide a detailed description. If it appears to be a complaint or issue related to a product or service, please summarize it."},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": image_url,
+                            },
+                        },
+                    ],
+                }
+            ],
+            max_tokens=300,
+        )
+
+        # Extract the description from the response
+        description = response.choices[0].message.content
+
+        # Process the description to determine if it's a complaint
+        completion = client.beta.chat.completions.parse(
+            model="gpt-4o-2024-08-06",
+            messages=[
+                {"role": "system",
+                 "content": "You are a helpful and friendly chat support agent. Your job is to assist users with their complaints and provide troubleshooting tips. Using the given prompt, determine if it is a complaint or not. If it is a complaint, classify it as its appropriate complaint and subcategory, alongside a summary. If it isn't a complaint, please tell the user in a text response. If it is a complaint, say sorry and you have documented and sent it to the support team in the text response with some common troubleshooting tips."},
+                {"role": "user", "content": description},
+            ],
+            response_format=MessageFormat,
+        )
+
+        # Extract and return the content of the response
+        print(completion)
+        event = completion.choices[0].message.parsed
+        if event.complaint:
+            # Invoke the RAG model and insert to Pinecone
+            data = {
+                'complaint': description,
+                'summary': event.summary,
+                'id': request.userID,
+                'category': event.category,
+                'sub_category': event.subcategory,
+                'resolved': False,
+                'admin_text': ' ',
+                'similar_complaints': []
+            }
+            await invoke_graph(data)
+            return {"result": event}
+
+    except Exception as e:
+        return {"error": str(e)}
+    
 # uvicorn app:app --reload
 
 if __name__ == "__main__":
