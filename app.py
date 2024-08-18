@@ -630,11 +630,13 @@ async def get_financial_goals(user_id: str):
     """
     This function returns all financial goals for the user.
     /get_financial_goals?user_id=123
+    Gest finances
     """
     try:
         result = supabase.table('financial Goals').select(
             '*').eq('user_id', user_id).execute()
         return result.data
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
