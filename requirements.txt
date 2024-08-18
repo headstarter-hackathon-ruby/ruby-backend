@@ -85,7 +85,6 @@ tenacity==8.5.0
 threadpoolctl==3.5.0
 tiktoken==0.7.0
 toml==0.10.2
-torch==2.4.0
 tqdm==4.66.5
 typing-inspect==0.9.0
 typing_extensions==4.12.2
@@ -93,5 +92,4 @@ urllib3==1.26.19
 uvicorn==0.30.6
 websockets==12.0
 wheel==0.43.0
-whisper==1.1.10
 yarl==1.9.4
