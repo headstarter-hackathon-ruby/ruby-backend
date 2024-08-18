@@ -183,7 +183,8 @@ async def get_similar_complaints(complaint: str, limit: int):
         }
         for match in top_matches['matches']
     ]
-    return similar_complaints
+    # Skip the first one as it is the same as the input complaint
+    return similar_complaints[1:]
 
 
 async def get_solution(complaint: str, limit: int):
@@ -229,7 +230,7 @@ async def get_solution(complaint: str, limit: int):
             f"You have one task: identify a plausible and potential solution using previous similar examples \n" \
             f"Please provide a solution based on the context while ensuring the response is human readable and\n" \
             f"understandable to the user. It should be short, sweet, and succint.\n" \
-
+ \
     # Augment the query with the context
     augmented_query = "<CONTEXT>\n" + "\n\n-------\n\n".join(
         contexts) + "\n-------\n</CONTEXT>\n\n\n\nMY QUESTION:\n" + query
@@ -287,9 +288,9 @@ async def read_resolution_status():
 
 
 @app.get("/complaints/similar", description="Returns similar complaints")
-async def get_similar_complaints_with_solution(complaint: str, limit: int = 3):
+async def get_similar_complaints_with_solution(complaint: str, limit: int = 4):
     """
-    This function returns similar complaints to the given complaint with an optional limit of 3.
+    This function returns similar complaints to the given complaint with an optional limit of 4.
     """
     return await get_similar_complaints(complaint, limit)
 
@@ -301,6 +302,7 @@ async def read_resolution_status():
     return {
         "unresolved": unresolved,
     }
+
 
 @app.get("/complaints/solutions", description="Returns solutions given a complaint")
 async def get_solutions(complaint: str, limit: int = 3):
