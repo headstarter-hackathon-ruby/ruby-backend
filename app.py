@@ -1,17 +1,19 @@
 import os
 from collections import Counter
 from datetime import datetime, timedelta
-
+import requests
 import numpy as np
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 from pydantic import BaseModel
-
+import whisper
 from pinecone import Pinecone
 from rag.utils.graph import invoke_graph
 from rag.utils.llm import invoke_model
+import mimetypes
+
 
 load_dotenv()
 client = OpenAI(
@@ -214,10 +216,14 @@ async def get_solution(complaint: str, limit: int):
         for match in top_matches['matches']
     ]
     text_contexts = [complaint['text'] for complaint in similar_solutions]
-    product_category_contexts = [complaint['product'] for complaint in similar_solutions]
-    sub_category_contexts = [complaint['subcategory'] for complaint in similar_solutions]
-    solutions_contexts = [complaint['admin_text'] for complaint in similar_solutions]
-    summary_contexts = [complaint['summary'] for complaint in similar_solutions]
+    product_category_contexts = [complaint['product']
+                                 for complaint in similar_solutions]
+    sub_category_contexts = [complaint['subcategory']
+                             for complaint in similar_solutions]
+    solutions_contexts = [complaint['admin_text']
+                          for complaint in similar_solutions]
+    summary_contexts = [complaint['summary']
+                        for complaint in similar_solutions]
 
     # Combine all contexts into a single string
     contexts = [f"Text: {text} Product: {product}, Sub-Product: {sub_product}, Solution: {solution}, Summary: {summary}"
@@ -226,9 +232,9 @@ async def get_solution(complaint: str, limit: int):
                     summary_contexts)]
 
     query = f"Given the complain: {complaint} \n" \
-            f"You have one task: identify a plausible and potential solution using previous similar examples \n" \
-            f"Please provide a solution based on the context while ensuring the response is human readable and\n" \
-            f"understandable to the user. It should be short, sweet, and succint.\n" \
+        f"You have one task: identify a plausible and potential solution using previous similar examples \n" \
+        f"Please provide a solution based on the context while ensuring the response is human readable and\n" \
+        f"understandable to the user. It should be short, sweet, and succint.\n" \
 
     # Augment the query with the context
     augmented_query = "<CONTEXT>\n" + "\n\n-------\n\n".join(
@@ -302,6 +308,7 @@ async def read_resolution_status():
         "unresolved": unresolved,
     }
 
+
 @app.get("/complaints/solutions", description="Returns solutions given a complaint")
 async def get_solutions(complaint: str, limit: int = 3):
     """
@@ -309,6 +316,72 @@ async def get_solutions(complaint: str, limit: int = 3):
     """
     return await get_solution(complaint, limit)
 
+
+class TranscriptionReq(BaseModel):
+    audio: str
+    userID: str
+
+
+# Manual mapping of MIME types to file extensions
+mime_extension_map = {
+    "audio/mpeg": ".mp3",       # MPEG audio
+    "audio/mp4": ".m4a",        # MP4 audio (used by .m4a files)
+    "audio/m4a": ".m4a",        # M4A audio (same as audio/mp4)
+    "audio/mp3": ".mp3",        # MP3 audio (same as audio/mpeg)
+    "audio/wav": ".wav",        # WAV audio
+    "audio/mpga": ".mp3",       # MP3 (audio/mpga is another MIME type for MP3)
+    "audio/webm": ".webm",      # WEBM audio format
+    "audio/x-mp4": ".m4a",      # MP4 audio (non-standard MIME type for .m4a)
+    "audio/x-m4a": ".m4a",      # M4A audio (non-standard MIME type for .m4a)
+}
+
+
+@app.post("/transcribe/audio", description="Transcribe an audio file to text")
+async def transcribe(request: TranscriptionReq):
+    '''
+    This function transcribes an audio file to text
+    '''
+    try:
+        # Download the audio file from the provided URL
+        audio_response = requests.get(request.audio)
+        if audio_response.status_code != 200:
+            return {"error": "Failed to download audio file from the provided URL"}
+
+        # Determine the audio file format using mimetypes
+        content_type = audio_response.headers.get('Content-Type')
+
+        ext = mimetypes.guess_extension(content_type)
+        if not ext:
+            ext = mime_extension_map.get(content_type)
+
+        if not ext:
+            return {"error": f"Unsupported file format: {content_type}"}
+
+        file_path = f"/tmp/audio_file{ext}"
+        audio_data = audio_response.content
+        with open(file_path, "wb") as temp_audio_file:
+            temp_audio_file.write(audio_data)
+
+        # Use OpenAI Whisper to transcribe the downloaded audio file
+        with open(file_path, "rb") as audio_file:
+            transcription = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file
+            )
+        print(transcription)
+        print(type(transcription))
+
+        # Return the transcription and userID
+        return {
+            "userID": request.userID,
+            "transcription": transcription.text
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# uvicorn app:app --reload
 
 if __name__ == "__main__":
     import uvicorn
