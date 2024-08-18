@@ -642,8 +642,105 @@ class TimeMachinePrediction(BaseModel):
     predicted_balance: float
 
 
-# uvicorn app:app --reload
+@app.get("/get_prediction", description="Get financial prediction")
+async def get_prediction(user_id: str, prediction_days: int = 30):
+    """
+    This function provides a financial prediction for the user, adapting to limited data.
+    /get_prediction?user_id=123&prediction_days=30
+    """
+    try:
+        # Fetch user's transactions
+        transactions = supabase.table('Transactions').select(
+            '*').eq('user_id', user_id).execute()
+        df = pd.DataFrame(transactions.data)
 
+        if df.empty:
+            raise HTTPException(
+                status_code=400, detail="No transaction data available for prediction")
+
+        # Convert date to datetime and sort
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.sort_values('date')
+
+        # Calculate daily balance
+        df['cumulative_balance'] = df['amount'].cumsum()
+
+        # Identify patterns if possible
+        recurring_transactions = identify_recurring_transactions(df)
+
+        # Prepare data for prediction
+        X = np.array(range(len(df))).reshape(-1, 1)
+        y = df['cumulative_balance'].values
+
+        # Train a simple linear regression model
+        model = LinearRegression()
+        model.fit(X, y)
+
+        # Generate future dates
+        last_date = df['date'].max()
+        future_dates = [last_date + timedelta(days=i)
+                        for i in range(1, prediction_days + 1)]
+        future_X = np.array(
+            range(len(df), len(df) + prediction_days)).reshape(-1, 1)
+
+        # Predict future balances
+        base_prediction = model.predict(future_X)
+
+        # Adjust predictions with recurring transactions if any
+        adjusted_prediction = adjust_prediction(
+            base_prediction, recurring_transactions, future_dates)
+
+        # Prepare response
+        predictions = [
+            TimeMachinePrediction(date=date, predicted_balance=float(balance))
+            for date, balance in zip(future_dates, adjusted_prediction)
+        ]
+
+        return predictions
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def identify_recurring_transactions(df):
+    if len(df) < 2:
+        return {}  # Not enough data to identify patterns
+
+    # Group transactions by name and frequency
+    grouped = df.groupby('transaction_name')
+    recurring = {}
+
+    for name, group in grouped:
+        if len(group) > 1:
+            # Calculate the average interval between transactions
+            intervals = group['date'].diff().mean().days
+            if 25 <= intervals <= 35:  # Monthly
+                recurring[name] = {'frequency': 'monthly',
+                                   'amount': group['amount'].mean()}
+            elif 6 <= intervals <= 8:  # Weekly
+                recurring[name] = {'frequency': 'weekly',
+                                   'amount': group['amount'].mean()}
+
+    return recurring
+
+
+def adjust_prediction(base_prediction, recurring_transactions, future_dates):
+    adjusted = base_prediction.copy()
+
+    # Add recurring transactions
+    for i, date in enumerate(future_dates):
+        for transaction, details in recurring_transactions.items():
+            if details['frequency'] == 'monthly' and date.day == 1:
+                adjusted[i] += details['amount']
+            # Assuming weekly transactions on Monday
+            elif details['frequency'] == 'weekly' and date.weekday() == 0:
+                adjusted[i] += details['amount']
+
+    return adjusted
+    # Convert transactions to a DataFrame
+
+
+# uvicorn app:app --reload
 if __name__ == "__main__":
     import uvicorn
 
