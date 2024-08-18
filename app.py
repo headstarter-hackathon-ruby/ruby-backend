@@ -196,6 +196,7 @@ async def get_similar_complaints(complaint: str, limit: int):
             'admin_text': match['metadata']['admin_text'],
             'summary': match['metadata']['summary'],
             'userID': match['metadata']['userID'],
+            'similarity_score': match['score']
 
         }
         for match in top_matches['matches']
