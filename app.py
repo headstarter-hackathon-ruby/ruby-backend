@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from statsmodels.tsa.seasonal import seasonal_decompose
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 from pydantic import BaseModel
@@ -44,7 +44,7 @@ index = pc.Index(INDEX_NAME)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000",
-                   "https://ruby-frontend-five.vercel.app/"],  # Allows all origins
+                   "https://ruby-frontend-five.vercel.app"],  # Allows all origins
     allow_credentials=True,
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
@@ -269,13 +269,25 @@ async def get_solution(complaint: str, limit: int):
 
 
 @app.get("/complaints/all", description="Returns all complaints")
-async def read_all_complaints():
+async def read_all_complaints(page: int = Query(1, ge=1), page_size: int = Query(50, ge=1)):
     """
-    This function returns all complaints. It returns the metadata of all complaints.
+    This function returns paginated complaints. It returns the metadata of all complaints.
     """
     complaints = get_all_complaints()
-    # Return only first 5 for brevity
-    return {"total_complaints": len(complaints), "complaints": complaints[:5]}
+    total_complaints = len(complaints)
+    start = (page - 1) * page_size
+    end = start + page_size
+    paginated_complaints = complaints[start:end]
+
+    if not paginated_complaints and page != 1:
+        raise HTTPException(status_code=404, detail="Page not found")
+
+    return {
+        "total_complaints": total_complaints,
+        "page": page,
+        "page_size": page_size,
+        "complaints": paginated_complaints
+    }
 
 
 @app.get("/complaints/categories", description="Returns the categories of all complaints")
