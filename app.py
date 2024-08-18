@@ -189,15 +189,7 @@ async def get_similar_complaints(complaint: str, limit: int):
 
     similar_complaints = [
         {
-            'product': match['metadata']['product'],
-            'subcategory': match['metadata'].get('subcategory', 'General-purpose credit card or charge card'),
-            'text': match['metadata']['text'],
-            'resolved': match['metadata']['resolved'],
-            'admin_text': match['metadata']['admin_text'],
-            'summary': match['metadata']['summary'],
-            'userID': match['metadata']['userID'],
             'similarity_score': match['score']
-
         }
         for match in top_matches['matches']
     ]
