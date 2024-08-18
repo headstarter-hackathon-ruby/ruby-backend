@@ -555,9 +555,10 @@ class TransactionCreate(BaseModel):
     amount: float
     date: date
 
+
 class TransactionDelete(BaseModel):
-    user_id: str
-    transaction_id: str
+    transaction_id: int
+
 
 @app.post("/add_transaction", description="Add a transaction")
 async def add_transaction(transaction: TransactionCreate):
@@ -581,14 +582,16 @@ async def add_transaction(transaction: TransactionCreate):
             return {"message": "Transaction added successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
-@app.post("/delete_transaction", description="Delete a transaction")
+
+
+@app.delete("/delete_transaction", description="Delete a transaction")
 async def delete_transaction(transaction: TransactionDelete):
     """
     This function removes a transaction from the user's account.
     """
     try:
-        result = supabase.table('Transactions').delete().eq('transaction_id', transaction.transaction_id).execute()
+        result = supabase.table('Transactions').delete().eq(
+            'transaction_id', transaction.transaction_id).execute()
 
         # Check if data is in the result
         if result.data:
