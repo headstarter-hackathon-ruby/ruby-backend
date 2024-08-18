@@ -3,6 +3,8 @@ from collections import Counter
 from datetime import datetime, timedelta
 import requests
 import numpy as np
+import pandas as pd
+from statsmodels.tsa.seasonal import seasonal_decompose
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -582,7 +584,7 @@ class FinancialGoalCreate(BaseModel):
     user_id: str
     date: date
     current_balance: float
-    target_balance: float
+    goal_balance: float
 
 
 @app.post("/add_financial_goal", description="Add a financial goal")
@@ -595,9 +597,9 @@ async def add_financial_goal(goal: FinancialGoalCreate):
             'user_id': goal.user_id,
             'date': goal.date.isoformat(),  # Convert date to ISO 8601 string
             'current_balance': goal.current_balance,
-            'target_balance': goal.target_balance
+            'goal_balance': goal.goal_balance
         }
-        result = supabase.table('FinancialGoals').upsert(data).execute()
+        result = supabase.table('financial Goals').upsert(data).execute()
 
         # Check if data is in the result
         if result.data:
@@ -616,7 +618,7 @@ async def get_financial_goals(user_id: str):
     /get_financial_goals?user_id=123
     """
     try:
-        result = supabase.table('FinancialGoals').select(
+        result = supabase.table('financial Goals').select(
             '*').eq('user_id', user_id).execute()
         return result.data
     except Exception as e:
