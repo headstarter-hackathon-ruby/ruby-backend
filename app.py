@@ -146,7 +146,7 @@ def get_all_complaints():
 
 def get_all_categories(complaints):
     categories = [complaint['metadata'].get(
-        'sub_category', 'Unknown') for complaint in complaints]
+        'subcategory', 'Unknown') for complaint in complaints]
     return dict(Counter(categories))
 
 
