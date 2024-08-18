@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import requests
 import numpy as np
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 from pydantic import BaseModel
@@ -12,11 +12,20 @@ from pinecone import Pinecone
 from rag.utils.graph import invoke_graph
 from rag.utils.llm import invoke_model
 import mimetypes
+from sklearn.linear_model import LinearRegression
+from datetime import date
+from supabase import create_client, Client
+
 
 load_dotenv()
 client = OpenAI(
     api_key=os.environ.get("OPENAI_API_KEY"),
 )
+supabase_url = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
+supabase_key = os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+
+
+supabase: Client = create_client(supabase_url, supabase_key)
 
 app = FastAPI()
 
@@ -231,11 +240,11 @@ async def get_solution(complaint: str, limit: int):
                     summary_contexts)]
 
     query = f"Given the complain: {complaint} \n" \
-            f"You have one task: identify a plausible and potential solution using previous similar examples \n" \
-            f"Please provide a solution based on the context while ensuring the response is human readable and\n" \
-            f"understandable to the user. It should be short, sweet, and succint.\n" \
+        f"You have one task: identify a plausible and potential solution using previous similar examples \n" \
+        f"Please provide a solution based on the context while ensuring the response is human readable and\n" \
+        f"understandable to the user. It should be short, sweet, and succint.\n" \
  \
-    # Augment the query with the context
+        # Augment the query with the context
     augmented_query = "<CONTEXT>\n" + "\n\n-------\n\n".join(
         contexts) + "\n-------\n</CONTEXT>\n\n\n\nMY QUESTION:\n" + query
     print(augmented_query)
@@ -297,7 +306,8 @@ async def update_admin_note(note: str, id: str):
     This function updates the admin note of a complaint.
     """
     complaint_data = index.fetch(ids=[id], namespace="rag_complaints")
-    currentNote = complaint_data['vectors'][id]['metadata'].get('admin_text', '')
+    currentNote = complaint_data['vectors'][id]['metadata'].get(
+        'admin_text', '')
     updatedNote = currentNote + " " + note
     index.update(
         id=id,
@@ -323,6 +333,7 @@ async def update_resolution(id: str):
     )
 
     return
+
 
 @app.get("/complaints/current", description="Returns the current complaint")
 async def get_current_complaints(id: str):
@@ -443,7 +454,7 @@ async def transcribe(request: TranscriptionReq):
         return {"error": str(e)}
 
 # Manual mapping of MIME types to file extensions
-#GPT only accepts these types
+# GPT only accepts these types
 image_mime_extension_map = {
     "image/jpeg": ".jpg",       # JPEG image
     "image/jpg": ".jpg",        # JPG image
@@ -451,9 +462,11 @@ image_mime_extension_map = {
     "image/webp": ".webp",      # WEBP image
 }
 
+
 class ImageTranscriptionReq(BaseModel):
     image: str
     userID: str
+
 
 @app.post("/transcribe/image", description="Analyze an image and provide a description")
 async def transcribe_image(request: ImageTranscriptionReq):
@@ -518,7 +531,103 @@ async def transcribe_image(request: ImageTranscriptionReq):
 
     except Exception as e:
         return {"error": str(e)}
-    
+
+
+class TransactionCreate(BaseModel):
+    user_id: str
+    transaction_name: str
+    amount: float
+    date: date
+
+
+@app.post("/add_transaction", description="Add a transaction")
+async def add_transaction(transaction: TransactionCreate):
+    """
+    This function adds a transaction to the user's account.
+    """
+    try:
+        data = {
+            'user_id': transaction.user_id,
+            'transaction_name': transaction.transaction_name,
+            'amount': transaction.amount,
+            'date': transaction.date.isoformat()  # Convert date to ISO 8601 string
+        }
+        result = supabase.table('Transactions').insert(data).execute()
+
+        # Check if data is in the result
+        if result.data:
+            return {"message": "Transaction added successfully", "data": result.data[0]}
+        else:
+            # If no data is returned but no exception was raised, assume success
+            return {"message": "Transaction added successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/get_transactions", description="Get all transactions")
+async def get_transactions(user_id: str):
+    """
+    This function returns all transactions for the user.
+    /get_transactions?user_id=123
+    """
+    try:
+        result = supabase.table('Transactions').select(
+            '*').eq('user_id', user_id).execute()
+        return result.data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class FinancialGoalCreate(BaseModel):
+    user_id: str
+    date: date
+    current_balance: float
+    target_balance: float
+
+
+@app.post("/add_financial_goal", description="Add a financial goal")
+async def add_financial_goal(goal: FinancialGoalCreate):
+    """
+    This function adds a financial goal to the user's account.
+    """
+    try:
+        data = {
+            'user_id': goal.user_id,
+            'date': goal.date.isoformat(),  # Convert date to ISO 8601 string
+            'current_balance': goal.current_balance,
+            'target_balance': goal.target_balance
+        }
+        result = supabase.table('FinancialGoals').upsert(data).execute()
+
+        # Check if data is in the result
+        if result.data:
+            return {"message": "Financial goal added successfully", "data": result.data[0]}
+        else:
+            # If no data is returned but no exception was raised, assume success
+            return {"message": "Financial goal added successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/get_financial_goals", description="Get all financial goals")
+async def get_financial_goals(user_id: str):
+    """
+    This function returns all financial goals for the user.
+    /get_financial_goals?user_id=123
+    """
+    try:
+        result = supabase.table('FinancialGoals').select(
+            '*').eq('user_id', user_id).execute()
+        return result.data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class TimeMachinePrediction(BaseModel):
+    date: date
+    predicted_balance: float
+
+
 # uvicorn app:app --reload
 
 if __name__ == "__main__":
