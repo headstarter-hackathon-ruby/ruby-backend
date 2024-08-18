@@ -1,3 +1,7 @@
+from typing import List
+from scipy import stats
+from datetime import date, datetime, timedelta
+from fastapi import FastAPI, HTTPException
 import os
 from collections import Counter
 from datetime import datetime, timedelta
@@ -17,6 +21,8 @@ import mimetypes
 from sklearn.linear_model import LinearRegression
 from datetime import date
 from supabase import create_client, Client
+from sklearn.model_selection import train_test_split
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
 
 load_dotenv()
@@ -642,14 +648,26 @@ class TimeMachinePrediction(BaseModel):
     predicted_balance: float
 
 
-@app.get("/get_prediction", description="Get financial prediction")
+app = FastAPI()
+
+# Assuming you have supabase client initialized somewhere
+# from your_supabase_module import supabase
+
+
+class TimeMachinePrediction(BaseModel):
+    date: date
+    predicted_balance: float
+    upper_balance: float
+    lower_balance: float
+
+
+@app.get("/get_prediction", description="Get adaptive financial prediction")
 async def get_prediction(user_id: str, prediction_days: int = 30):
     """
-    This function provides a financial prediction for the user, adapting to limited data.
+    This function provides an adaptive financial prediction based on available data.
     /get_prediction?user_id=123&prediction_days=30
     """
     try:
-        # Fetch user's transactions
         transactions = supabase.table('Transactions').select(
             '*').eq('user_id', user_id).execute()
         df = pd.DataFrame(transactions.data)
@@ -658,42 +676,33 @@ async def get_prediction(user_id: str, prediction_days: int = 30):
             raise HTTPException(
                 status_code=400, detail="No transaction data available for prediction")
 
-        # Convert date to datetime and sort
         df['date'] = pd.to_datetime(df['date'])
         df = df.sort_values('date')
 
-        # Calculate daily balance
         df['cumulative_balance'] = df['amount'].cumsum()
 
-        # Identify patterns if possible
-        recurring_transactions = identify_recurring_transactions(df)
-
-        # Prepare data for prediction
-        X = np.array(range(len(df))).reshape(-1, 1)
-        y = df['cumulative_balance'].values
-
-        # Train a simple linear regression model
-        model = LinearRegression()
-        model.fit(X, y)
-
-        # Generate future dates
         last_date = df['date'].max()
         future_dates = [last_date + timedelta(days=i)
                         for i in range(1, prediction_days + 1)]
-        future_X = np.array(
-            range(len(df), len(df) + prediction_days)).reshape(-1, 1)
 
-        # Predict future balances
-        base_prediction = model.predict(future_X)
-
-        # Adjust predictions with recurring transactions if any
-        adjusted_prediction = adjust_prediction(
+        base_prediction = get_adaptive_prediction(df, prediction_days)
+        recurring_transactions = identify_recurring_transactions(df)
+        adjusted_prediction = adjust_for_recurring(
             base_prediction, recurring_transactions, future_dates)
+        final_prediction = incorporate_recent_trend(df, adjusted_prediction)
+        final_prediction_with_volatility = add_volatility(df, final_prediction)
+        upper_lower_bounds = calculate_bounds(
+            df, final_prediction_with_volatility)
 
         # Prepare response
         predictions = [
-            TimeMachinePrediction(date=date, predicted_balance=float(balance))
-            for date, balance in zip(future_dates, adjusted_prediction)
+            TimeMachinePrediction(
+                date=date,
+                predicted_balance=float(balance),
+                upper_balance=float(upper),
+                lower_balance=float(lower)
+            )
+            for date, balance, (upper, lower) in zip(future_dates, final_prediction_with_volatility, upper_lower_bounds)
         ]
 
         return predictions
@@ -702,17 +711,61 @@ async def get_prediction(user_id: str, prediction_days: int = 30):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def calculate_bounds(df, prediction, confidence_level=0.95):
+    if len(df) >= 7:
+        # Calculate the standard deviation of daily changes
+        daily_changes = df['amount'].diff().dropna()
+        std_dev = daily_changes.std()
+
+        # Calculate the margin of error
+        margin = stats.norm.ppf((1 + confidence_level) / 2) * \
+            std_dev * np.sqrt(np.arange(1, len(prediction) + 1))
+
+        upper_bound = prediction + margin
+        lower_bound = prediction - margin
+
+        return list(zip(upper_bound, lower_bound))
+    else:
+        # For very limited data, use a simple percentage-based approach
+        upper_bound = prediction * 1.1  # 10% above prediction
+        lower_bound = prediction * 0.9  # 10% below prediction
+        return list(zip(upper_bound, lower_bound))
+
+
+def get_adaptive_prediction(df, prediction_days):
+    data_points = len(df)
+
+    if data_points >= 14:
+        model = ExponentialSmoothing(
+            df['cumulative_balance'], trend='add', seasonal='add', seasonal_periods=7)
+        fitted_model = model.fit()
+        forecast = fitted_model.forecast(prediction_days)
+    elif data_points >= 7:  # At least 1 week of data
+        model = ExponentialSmoothing(
+            df['cumulative_balance'], trend='add', seasonal=None)
+        fitted_model = model.fit()
+        forecast = fitted_model.forecast(prediction_days)
+    else:
+        X = np.array(range(len(df))).reshape(-1, 1)
+        y = df['cumulative_balance'].values
+        model = LinearRegression()
+        model.fit(X, y)
+        future_X = np.array(
+            range(len(df), len(df) + prediction_days)).reshape(-1, 1)
+        forecast = model.predict(future_X)
+
+    return forecast
+
+
 def identify_recurring_transactions(df):
     if len(df) < 2:
-        return {}  # Not enough data to identify patterns
+        return {}
 
-    # Group transactions by name and frequency
     grouped = df.groupby('transaction_name')
     recurring = {}
 
     for name, group in grouped:
         if len(group) > 1:
-            # Calculate the average interval between transactions
             intervals = group['date'].diff().mean().days
             if 25 <= intervals <= 35:  # Monthly
                 recurring[name] = {'frequency': 'monthly',
@@ -724,20 +777,35 @@ def identify_recurring_transactions(df):
     return recurring
 
 
-def adjust_prediction(base_prediction, recurring_transactions, future_dates):
+def adjust_for_recurring(base_prediction, recurring_transactions, future_dates):
     adjusted = base_prediction.copy()
 
-    # Add recurring transactions
     for i, date in enumerate(future_dates):
         for transaction, details in recurring_transactions.items():
             if details['frequency'] == 'monthly' and date.day == 1:
                 adjusted[i] += details['amount']
-            # Assuming weekly transactions on Monday
             elif details['frequency'] == 'weekly' and date.weekday() == 0:
                 adjusted[i] += details['amount']
 
     return adjusted
-    # Convert transactions to a DataFrame
+
+
+def incorporate_recent_trend(df, prediction):
+    if len(df) >= 7:
+        recent_trend = df['amount'].tail(7).mean()
+        weights = np.linspace(1, 0, len(prediction))
+        trend_adjustment = recent_trend * weights
+        return prediction + trend_adjustment
+    return prediction
+
+
+def add_volatility(df, prediction):
+    if len(df) >= 7:
+        volatility = df['amount'].std()
+        # Reduced volatility impact
+        noise = np.random.normal(0, volatility * 0.5, len(prediction))
+        return prediction + noise
+    return prediction
 
 
 # uvicorn app:app --reload
