@@ -324,10 +324,10 @@ async def update_resolution(id: str):
 
     return
 
-@app.get("/complaints/current", description="Returns similar complaints")
+@app.get("/complaints/current", description="Returns the current complaint")
 async def get_current_complaints(id: str):
     """
-    This function returns similar complaints to the given complaint.
+    This function returns the current complaint's metadata by the id.
     """
     complaint = index.fetch(ids=[id], namespace="rag_complaints")
     print(complaint)
