@@ -13,7 +13,6 @@ from rag.utils.graph import invoke_graph
 from rag.utils.llm import invoke_model
 import mimetypes
 
-
 load_dotenv()
 client = OpenAI(
     api_key=os.environ.get("OPENAI_API_KEY"),
@@ -232,10 +231,10 @@ async def get_solution(complaint: str, limit: int):
                     summary_contexts)]
 
     query = f"Given the complain: {complaint} \n" \
-        f"You have one task: identify a plausible and potential solution using previous similar examples \n" \
-        f"Please provide a solution based on the context while ensuring the response is human readable and\n" \
-        f"understandable to the user. It should be short, sweet, and succint.\n" \
-
+            f"You have one task: identify a plausible and potential solution using previous similar examples \n" \
+            f"Please provide a solution based on the context while ensuring the response is human readable and\n" \
+            f"understandable to the user. It should be short, sweet, and succint.\n" \
+ \
     # Augment the query with the context
     augmented_query = "<CONTEXT>\n" + "\n\n-------\n\n".join(
         contexts) + "\n-------\n</CONTEXT>\n\n\n\nMY QUESTION:\n" + query
@@ -292,6 +291,49 @@ async def read_resolution_status():
     }
 
 
+@app.get("/complaints/admin_message", description="Updates the admin message of a complaint")
+async def update_admin_note(note: str, id: str):
+    """
+    This function updates the admin note of a complaint.
+    """
+    complaint_data = index.fetch(ids=[id], namespace="rag_complaints")
+    currentNote = complaint_data['vectors'][id]['metadata'].get('admin_text', '')
+    updatedNote = currentNote + " " + note
+    index.update(
+        id=id,
+        set_metadata={"admin_text": updatedNote},
+        namespace="rag_complaints",
+    )
+
+    return
+
+
+@app.get("/complaints/resolution", description="Updates the resolution status of a complaint")
+async def update_resolution(id: str):
+    """
+    This function updates the resolution status of a complaint.
+    """
+    complaint_data = index.fetch(ids=[id], namespace="rag_complaints")
+    print(complaint_data)
+    resolved = complaint_data['vectors'][id]['metadata'].get('resolved', False)
+    index.update(
+        id=id,
+        set_metadata={"resolved": not resolved},
+        namespace="rag_complaints",
+    )
+
+    return
+
+@app.get("/complaints/current", description="Returns similar complaints")
+async def get_current_complaints(id: str):
+    """
+    This function returns similar complaints to the given complaint.
+    """
+    complaint = index.fetch(ids=[id], namespace="rag_complaints")
+    print(complaint)
+    return complaint['vectors'][id]['metadata']
+
+
 @app.get("/complaints/similar", description="Returns similar complaints")
 async def get_similar_complaints_with_solution(complaint: str, limit: int = 4):
     """
@@ -324,15 +366,15 @@ class TranscriptionReq(BaseModel):
 
 # Manual mapping of MIME types to file extensions
 mime_extension_map = {
-    "audio/mpeg": ".mp3",       # MPEG audio
-    "audio/mp4": ".m4a",        # MP4 audio (used by .m4a files)
-    "audio/m4a": ".m4a",        # M4A audio (same as audio/mp4)
-    "audio/mp3": ".mp3",        # MP3 audio (same as audio/mpeg)
-    "audio/wav": ".wav",        # WAV audio
-    "audio/mpga": ".mp3",       # MP3 (audio/mpga is another MIME type for MP3)
-    "audio/webm": ".webm",      # WEBM audio format
-    "audio/x-mp4": ".m4a",      # MP4 audio (non-standard MIME type for .m4a)
-    "audio/x-m4a": ".m4a",      # M4A audio (non-standard MIME type for .m4a)
+    "audio/mpeg": ".mp3",  # MPEG audio
+    "audio/mp4": ".m4a",  # MP4 audio (used by .m4a files)
+    "audio/m4a": ".m4a",  # M4A audio (same as audio/mp4)
+    "audio/mp3": ".mp3",  # MP3 audio (same as audio/mpeg)
+    "audio/wav": ".wav",  # WAV audio
+    "audio/mpga": ".mp3",  # MP3 (audio/mpga is another MIME type for MP3)
+    "audio/webm": ".webm",  # WEBM audio format
+    "audio/x-mp4": ".m4a",  # MP4 audio (non-standard MIME type for .m4a)
+    "audio/x-m4a": ".m4a",  # M4A audio (non-standard MIME type for .m4a)
 }
 
 
@@ -379,7 +421,7 @@ async def transcribe(request: TranscriptionReq):
             response_format=MessageFormat,
         )
 
-    # Extract and return the content of the response
+        # Extract and return the content of the response
         print(completion)
         event = completion.choices[0].message.parsed
         if event.complaint:
