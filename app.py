@@ -368,14 +368,34 @@ async def transcribe(request: TranscriptionReq):
                 model="whisper-1",
                 file=audio_file
             )
-        print(transcription)
-        print(type(transcription))
+        modelReq = transcription.text
+        completion = client.beta.chat.completions.parse(
+            model="gpt-4o-2024-08-06",
+            messages=[
+                {"role": "system",
+                 "content": "You are a helpful and friendly chat support agent. Your job is to assist users with their complaints and provide troubleshooting tips. Using the given prompt, determine if it is a complaint or not. If it is a complaint, classify it as its appropriate complaint and subcategory, alongside a summary. If it isn't a complaint, please tell the user in a text response. If it is a complaint, say sorry and you have documented and sent it to the support team in the text response with some common troubleshooting tips."},
+                {"role": "user", "content": modelReq},
+            ],
+            response_format=MessageFormat,
+        )
 
-        # Return the transcription and userID
-        return {
-            "userID": request.userID,
-            "transcription": transcription.text
-        }
+    # Extract and return the content of the response
+        print(completion)
+        event = completion.choices[0].message.parsed
+        if event.complaint:
+            # Invoke the RAG model and insert to Pinecone
+            data = {
+                'complaint': modelReq,
+                'summary': event.summary,
+                'id': request.userID,
+                'category': event.category,
+                'sub_category': event.subcategory,
+                'resolved': False,
+                'admin_text': ' ',
+                'similar_complaints': []
+            }
+            await invoke_graph(data)
+            return {"result": event}
 
     except Exception as e:
         return {"error": str(e)}
