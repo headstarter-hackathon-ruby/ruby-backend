@@ -673,8 +673,7 @@ async def get_prediction(user_id: str, prediction_days: int = 30):
         df = pd.DataFrame(transactions.data)
 
         if df.empty:
-            raise HTTPException(
-                status_code=400, detail="No transaction data available for prediction")
+            return []
 
         df['date'] = pd.to_datetime(df['date'])
         df = df.sort_values('date')
