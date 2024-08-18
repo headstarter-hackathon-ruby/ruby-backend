@@ -133,6 +133,54 @@ async def text_prompt(request: PromptFormat):
 
 # uvicorn app:app --reload# New functions for complaint queries
 
+class AudioPromptFormat(BaseModel):
+    audioUrl: HttpUrl
+    userID: str
+
+
+@app.post("/audioPrompt", description="This endpoint will post and use GPT to classify an audio prompt")
+async def audio_prompt(request: AudioPromptFormat):
+    try:
+        transcript = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=request.audioUrl,
+            response_format="text"
+        )
+
+        completion = client.beta.chat.completions.parse(
+            model="gpt-4o-2024-08-06",
+            messages=[
+                {"role": "system",
+                 "content": "You are a helpful and friendly chat support agent. Your job is to assist users with their complaints and provide troubleshooting tips. Using the given prompt, determine if it is a complaint or not. If it is a complaint, classify it as its appropriate complaint and subcategory, alongside a summary. If it isn't a complaint, please tell the user in a text response. If it is a complaint, say sorry and you have documented and sent it to the support team in the text response with some common troubleshooting tips."},
+                {"role": "user", "content": transcript},
+            ],
+            response_format=MessageFormat,
+        )
+        print(completion)
+        event = completion.choices[0].message.parsed
+        if event.complaint:
+            # Invoke the RAG model and insert to Pinecone
+            data = {
+                'complaint': transcript,
+                'summary': event.summary,
+                'id': request.userID,
+                'category': event.category,
+                'sub_category': event.subcategory,
+                'resolved': False,
+                'admin_text': ' ',
+                'similar_complaints': []
+            }
+            await invoke_graph(data)
+            return {"result": event}
+
+        else:
+            print("Not a complaint")
+
+        return {"result": event}
+
+    except Exception as e:
+        return {"error": str(e)}
+
 
 def get_all_complaints():
     dummy_vector = np.zeros(1536).tolist()
@@ -185,7 +233,8 @@ async def get_similar_complaints(complaint: str, limit: int):
         }
         for match in top_matches['matches']
     ]
-    return similar_complaints
+    # Skip the first one as it is the same as the input complaint
+    return similar_complaints[1:]
 
 
 async def get_solution(complaint: str, limit: int):
@@ -293,9 +342,9 @@ async def read_resolution_status():
 
 
 @app.get("/complaints/similar", description="Returns similar complaints")
-async def get_similar_complaints_with_solution(complaint: str, limit: int = 3):
+async def get_similar_complaints_with_solution(complaint: str, limit: int = 4):
     """
-    This function returns similar complaints to the given complaint with an optional limit of 3.
+    This function returns similar complaints to the given complaint with an optional limit of 4.
     """
     return await get_similar_complaints(complaint, limit)
 
