@@ -583,7 +583,7 @@ async def add_transaction(transaction: TransactionCreate):
         raise HTTPException(status_code=500, detail=str(e))
     
 @app.post("/delete_transaction", description="Delete a transaction")
-async def add_transaction(transaction: TransactionDelete):
+async def delete_transaction(transaction: TransactionDelete):
     """
     This function removes a transaction from the user's account.
     """
