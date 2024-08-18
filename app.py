@@ -648,8 +648,6 @@ class TimeMachinePrediction(BaseModel):
     predicted_balance: float
 
 
-app = FastAPI()
-
 # Assuming you have supabase client initialized somewhere
 # from your_supabase_module import supabase
 
