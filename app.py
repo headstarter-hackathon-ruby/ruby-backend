@@ -136,14 +136,14 @@ class AudioPromptFormat(BaseModel):
     userID: str
 
 @app.post("/audioPrompt", description="This endpoint will post and use GPT to classify an audio prompt")
-async def text_prompt(request: AudioPromptFormat):
+async def audio_prompt(request: AudioPromptFormat):
     try:
         transcript = client.audio.transcriptions.create(
             model="whisper-1",
             file=request.audioUrl,
             response_format="text"
         )
-        
+
         completion = client.beta.chat.completions.parse(
             model="gpt-4o-2024-08-06",
             messages=[
@@ -158,7 +158,7 @@ async def text_prompt(request: AudioPromptFormat):
         if event.complaint:
             # Invoke the RAG model and insert to Pinecone
             data = {
-                'complaint': request.prompt,
+                'complaint': transcript,
                 'summary': event.summary,
                 'id': request.userID,
                 'category': event.category,
